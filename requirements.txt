@@ -1,0 +1,8 @@
+streamlit
+pandas
+SQLAlchemy
+PyMySQL
+plotly
+openpyxl
+xlsxwriter
+reportlab
