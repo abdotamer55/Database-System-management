@@ -354,8 +354,6 @@ AI Engineer | Python Developer | Data Analyst
 GitHub:
 <https://github.com/abdotamer55>
 
-LinkedIn:
-<https://www.linkedin.com/>
 
 ---
 
