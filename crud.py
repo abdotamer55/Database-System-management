@@ -516,146 +516,217 @@ def toggle_student_status(student_id):
 
         session.close()
         
-def get_dashboard_stats():
+def _apply_student_filters(query, academic_year_id=None, grade_id=None, student_group=None):
+    if academic_year_id is not None:
+        query = query.filter(Student.academic_year_id == academic_year_id)
+
+    if grade_id is not None:
+        query = query.filter(Student.grade_id == grade_id)
+
+    if student_group:
+        query = query.filter(Student.student_group == student_group)
+
+    return query
+
+
+def get_dashboard_stats(academic_year_id=None, grade_id=None, student_group=None):
     session = get_session()
 
     try:
+        total_students_query = _apply_student_filters(
+            session.query(Student.student_id),
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+        total_students = total_students_query.count()
 
-        total_students = session.query(
-            func.count(Student.student_id)
-        ).scalar()
+        active_students_query = _apply_student_filters(
+            session.query(Student.student_id).filter(Student.is_active == True),
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+        active_students = active_students_query.count()
 
-        active_students = session.query(
-            func.count(Student.student_id)
-        ).filter(
-            Student.is_active == True
-        ).scalar()
+        lessons_query = session.query(Lesson.lesson_id)
 
-        total_lessons = session.query(
-            func.count(Lesson.lesson_id)
-        ).scalar()
+        if academic_year_id is not None:
+            lessons_query = lessons_query.filter(Lesson.academic_year_id == academic_year_id)
 
-        total_payments = session.query(
+        if grade_id is not None:
+            lessons_query = lessons_query.filter(Lesson.grade_id == grade_id)
+
+        total_lessons = lessons_query.count()
+
+        payment_query = session.query(
             func.coalesce(func.sum(Payment.amount), 0)
-        ).scalar()
+        ).join(Student, Payment.student_id == Student.student_id)
+        payment_query = _apply_student_filters(
+            payment_query,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+        total_payments = payment_query.scalar()
 
         return {
             "students": total_students,
             "active": active_students,
             "lessons": total_lessons,
-            "revenue": float(total_payments)
+            "revenue": float(total_payments or 0),
         }
 
     finally:
         session.close()
-        
-def students_by_grade():
+
+
+def students_by_grade(academic_year_id=None, grade_id=None, student_group=None):
 
     session = get_session()
 
     try:
-
         result = (
             session.query(
                 Grade.grade_name,
                 func.count(Student.student_id)
             )
-            .join(Student)
-            .group_by(Grade.grade_name)
+            .join(Student, Student.grade_id == Grade.grade_id)
+        )
+
+        result = _apply_student_filters(
+            result,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+
+        return (
+            result.group_by(Grade.grade_name)
+            .order_by(Grade.grade_name)
             .all()
         )
 
-        return result
-
     finally:
-
         session.close()
 
-def monthly_revenue():
+
+def monthly_revenue(academic_year_id=None, grade_id=None, student_group=None):
 
     session = get_session()
 
     try:
-
         result = (
             session.query(
-                func.month(Payment.payment_date),
-                func.sum(Payment.amount)
+                func.month(Payment.payment_date).label("month_num"),
+                func.sum(Payment.amount).label("total_revenue")
             )
-            .group_by(
-                func.month(Payment.payment_date)
-            )
+            .join(Student, Payment.student_id == Student.student_id)
+        )
+
+        result = _apply_student_filters(
+            result,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+
+        return (
+            result.group_by(func.month(Payment.payment_date))
+            .order_by(func.month(Payment.payment_date))
             .all()
         )
 
-        return result
-
     finally:
-
         session.close()
-def attendance_summary():
+
+
+def attendance_summary(academic_year_id=None, grade_id=None, student_group=None):
 
     session = SessionLocal()
 
     try:
-
         result = (
             session.query(
                 Attendance.status,
                 func.count(Attendance.attendance_id)
             )
-            .group_by(Attendance.status)
-            .all()
+            .join(Student, Attendance.student_id == Student.student_id)
+            .join(Lesson, Attendance.lesson_id == Lesson.lesson_id)
         )
 
-        return result
+        result = _apply_student_filters(
+            result,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+
+        return result.group_by(Attendance.status).all()
 
     finally:
         session.close()
-        
-def top_students(limit=10):
+
+
+def top_students(limit=10, academic_year_id=None, grade_id=None, student_group=None):
 
     session = get_session()
 
     try:
-
         result = (
             session.query(
                 Student.full_name,
                 func.avg(Exam.score).label("avg_score")
             )
-            .join(Exam)
-            .group_by(Student.student_id)
+            .join(Exam, Student.student_id == Exam.student_id)
+        )
+
+        result = _apply_student_filters(
+            result,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+
+        return (
+            result.group_by(Student.student_id, Student.full_name)
             .order_by(func.avg(Exam.score).desc())
             .limit(limit)
             .all()
         )
 
-        return result
-
     finally:
-
         session.close()
-        
-def unpaid_students():
+
+
+def unpaid_students(academic_year_id=None, grade_id=None, student_group=None):
 
     session = get_session()
 
     try:
-
         result = (
-            session.query(Student)
-            .join(Payment)
-            .filter(
-                Payment.status == "Pending"
+            session.query(
+                Student.full_name.label("student"),
+                Grade.grade_name.label("grade"),
+                Payment.payment_for_month.label("month")
             )
+            .join(Payment, Payment.student_id == Student.student_id)
+            .join(Grade, Student.grade_id == Grade.grade_id)
+        )
+
+        result = _apply_student_filters(
+            result,
+            academic_year_id=academic_year_id,
+            grade_id=grade_id,
+            student_group=student_group,
+        )
+
+        return (
+            result.filter(Payment.status != "Paid")
             .all()
         )
 
-        return result
-
     finally:
-
         session.close()
         
 
