@@ -1,6 +1,7 @@
 DB_CONFIG = {
-    "host": "127.0.0.1",
+    "host": "altaria.proxy.rlwy.net",
+    "port": 55136,
     "user": "root",
-    "password": "123456",
-    "database": "center_db"
+    "password": "tZTaXvGWfGXWgyueSnZUqxmRhFgIeJaD",
+    "database": "railway"
 }

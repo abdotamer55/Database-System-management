@@ -7,7 +7,7 @@ password = quote_plus(DB_CONFIG["password"])
 
 DATABASE_URL = (
     f"mysql+pymysql://{DB_CONFIG['user']}:{password}"
-    f"@{DB_CONFIG['host']}:3306/{DB_CONFIG['database']}"
+    f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
 )
 
 engine = create_engine(

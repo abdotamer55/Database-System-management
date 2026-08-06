@@ -3,6 +3,8 @@ import calendar
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from crud import (
     attendance_summary,
@@ -25,6 +27,23 @@ st.set_page_config(
 
 show_sidebar()
 
+
+def safe_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs), None
+    except DataError as exc:
+        message = str(exc.orig) if getattr(exc, "orig", None) else str(exc)
+        return None, f"The data you entered is too long for one of the fields. {message}"
+    except IntegrityError:
+        return None, "This operation conflicts with existing data (duplicate or invalid reference)."
+    except OperationalError:
+        return None, "Could not reach the database. Please check your connection and try again."
+    except DetachedInstanceError:
+        return None, "That record went stale before it could be read. Please refresh."
+    except Exception as e:
+        return None, f"Unexpected error: {e}"
+
+
 st.title("📊 Center Dashboard")
 st.caption("Educational Center Management System")
 
@@ -37,7 +56,10 @@ st.divider()
 c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
 
 with c1:
-    years = get_academic_years()
+    years, years_error = safe_call(get_academic_years)
+    if years_error:
+        st.error(years_error)
+        years = []
     year_lookup = {year.academic_year: year for year in years}
     year_options = ["All"] + list(year_lookup.keys())
 
@@ -50,7 +72,10 @@ with c1:
     )
 
 with c2:
-    grades = get_grades()
+    grades, grades_error = safe_call(get_grades)
+    if grades_error:
+        st.error(grades_error)
+        grades = []
     grade_lookup = {grade.grade_name: grade for grade in grades}
     grade_options = ["All"] + list(grade_lookup.keys())
 
@@ -59,7 +84,10 @@ with c2:
     grade_id = selected_grade.grade_id if selected_grade is not None else None
 
 with c3:
-    groups = get_groups()
+    groups, groups_error = safe_call(get_groups)
+    if groups_error:
+        st.error(groups_error)
+        groups = []
     group_options = ["All"] + groups
 
     group_name = st.selectbox("Group", group_options)
@@ -76,11 +104,15 @@ st.divider()
 # DASHBOARD STATS
 # =====================================================
 
-stats = get_dashboard_stats(
+stats, stats_error = safe_call(
+    get_dashboard_stats,
     academic_year_id=academic_year_id,
     grade_id=grade_id,
     student_group=student_group,
 )
+if stats_error:
+    st.error(stats_error)
+    stats = {"students": 0, "lessons": 0, "revenue": 0, "active": 0}
 
 students = stats["students"]
 lessons = stats["lessons"]
@@ -112,11 +144,15 @@ left, right = st.columns(2)
 with left:
     st.subheader("👨‍🎓 Students Per Grade")
 
-    grade_data = students_by_grade(
+    grade_data, grade_data_error = safe_call(
+        students_by_grade,
         academic_year_id=academic_year_id,
         grade_id=grade_id,
         student_group=student_group,
     )
+    if grade_data_error:
+        st.error(grade_data_error)
+        grade_data = []
 
     grade_df = pd.DataFrame(grade_data, columns=["Grade", "Students"])
 
@@ -130,11 +166,15 @@ with left:
 with right:
     st.subheader("💰 Monthly Revenue")
 
-    revenue_data = monthly_revenue(
+    revenue_data, revenue_data_error = safe_call(
+        monthly_revenue,
         academic_year_id=academic_year_id,
         grade_id=grade_id,
         student_group=student_group,
     )
+    if revenue_data_error:
+        st.error(revenue_data_error)
+        revenue_data = []
 
     revenue_df = pd.DataFrame(revenue_data, columns=["Month", "Revenue"])
 
@@ -159,11 +199,15 @@ left, right = st.columns(2)
 with left:
     st.subheader("📋 Attendance Status")
 
-    attendance_data = attendance_summary(
+    attendance_data, attendance_data_error = safe_call(
+        attendance_summary,
         academic_year_id=academic_year_id,
         grade_id=grade_id,
         student_group=student_group,
     )
+    if attendance_data_error:
+        st.error(attendance_data_error)
+        attendance_data = []
 
     attendance_df = pd.DataFrame(attendance_data, columns=["Status", "Count"])
 
@@ -177,12 +221,16 @@ with left:
 with right:
     st.subheader("🏆 Top Students")
 
-    top_data = top_students(
+    top_data, top_data_error = safe_call(
+        top_students,
         limit=10,
         academic_year_id=academic_year_id,
         grade_id=grade_id,
         student_group=student_group,
     )
+    if top_data_error:
+        st.error(top_data_error)
+        top_data = []
 
     top_df = pd.DataFrame(top_data, columns=["Student", "Average"])
 
@@ -213,11 +261,15 @@ with left:
 with right:
     st.subheader("🚨 Unpaid Students")
 
-    unpaid_data = unpaid_students(
+    unpaid_data, unpaid_data_error = safe_call(
+        unpaid_students,
         academic_year_id=academic_year_id,
         grade_id=grade_id,
         student_group=student_group,
     )
+    if unpaid_data_error:
+        st.error(unpaid_data_error)
+        unpaid_data = []
 
     unpaid_df = pd.DataFrame(unpaid_data, columns=["Student", "Grade", "Month"])
 
